@@ -10,12 +10,12 @@ class Usuario(BaseModel):
     usu_codigo: str
     
 class Archivo(BaseModel):
-    arc_id: int
+    arc_id: Optional[int] = None
     arc_nombre: str
     arc_ruta: str
     arc_tiempo: float
     arc_fecha: datetime
-    arc_usu_id_fk: int
+    usuario: Usuario
     
 class Respuesta(BaseModel):
     success: bool

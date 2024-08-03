@@ -29,10 +29,10 @@ def read_usuarios():
 
 @app.get('/archivos')
 def read_archivos():
-    registros = conexion.devolverRegistros('archivos')
+    registros = conexion.devolverArchivos()
     archivos = []
     for registro in registros:
-        archivos.append(clases.Archivo(arc_id=registro[0], arc_nombre=registro[1], arc_ruta=registro[2], arc_tiempo=registro[3], arc_fecha=registro[4], arc_usu_id_fk=registro[5]))
+        archivos.append(clases.Archivo(arc_id=registro[0], arc_nombre=registro[1], arc_ruta=registro[2], arc_tiempo=registro[3], arc_fecha=registro[4], usuario=clases.Usuario(usu_id=registro[6], usu_correo=registro[7], usu_nombre=registro[9], usu_codigo=registro[10])))
     return clases.Respuesta(success=True, message='All ok', data=archivos)
 
 @app.post('/usuario')
@@ -40,6 +40,25 @@ def registrarUsuarios(usuario:clases.Usuario):
     resultado = conexion.registrarUsuario(usuario)
     return clases.Respuesta(success=True, message='All ok', data=resultado)
 
+@app.post('/archivo')
+def registrarArchivo(archivo:clases.Archivo):
+    resultado = conexion.registrarArchivo(archivo)
+    return clases.Respuesta(success=True, message='All ok', data=resultado)
+
+@app.delete('/usuario')
+def borrarUsuario(usuario:clases.Usuario):
+    resultado = conexion.borrarUsuario(usuario)
+    return clases.Respuesta(success=True, message='All ok', data=resultado)
+
+@app.delete('/archivo')
+def borrarArchivo(archivo:clases.Archivo):
+    resultado = conexion.borrarArchivo(archivo)
+    return clases.Respuesta(success=True, message='All ok', data=resultado)
+
+@app.put('/usuario')
+def actualizarUsuario(usuario:clases.Usuario):
+    resultado = conexion.actualizarUsuario(usuario)
+    return clases.Respuesta(success=True, message='All ok', data=resultado)
 
 
 
