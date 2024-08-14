@@ -1,3 +1,4 @@
 /servicio-env
 /__pycache__
 .env
+/documentos/*
