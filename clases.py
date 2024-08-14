@@ -22,3 +22,6 @@ class Respuesta(BaseModel):
     message: str
     data: object
     
+class Login(BaseModel):
+    correo: str
+    password: str

@@ -240,7 +240,7 @@ def buscarUsuario(id:int):
     cursor = conexion.cursor()
 
     # Ejecutar una consulta SQL para seleccionar datos
-    consulta = f"SELECT * FROM usuario WHERE (usu_id = {id});"
+    consulta = f"SELECT * FROM usuarios WHERE (usu_id = {id});"
     cursor.execute(consulta)
 
     # Obtener todos los resultados de la consulta
@@ -318,3 +318,37 @@ def actualizarUsuario(usuario:clases.Usuario):
     conexion.close()
     
     return resultados
+
+def loginUsuario(usuario:clases.Login):
+    conexion = mysql.connector.connect(
+        host=os.environ['host'],
+        user=os.environ['user'],
+        password=os.environ['password'],
+        database=os.environ['database'],
+        port=os.environ['port']
+    )
+    
+    # Crear un objeto cursor para ejecutar consultas SQL
+    cursor = conexion.cursor()
+
+    # Ejecutar una consulta SQL para seleccionar datos
+    
+    consulta = f"SELECT * FROM usuarios WHERE (usu_correo LIKE '{usuario.correo}');"
+    print(consulta)
+    cursor.execute(consulta)
+
+    # Obtener todos los resultados de la consulta
+    resultados = cursor.fetchall()
+    #print(consulta)
+    # Mostrar los resultados
+    # for resultado in resultados:
+    #     print(resultado)
+        
+    # Cerrar el cursor y la conexión
+    cursor.close()
+    conexion.close()
+    
+    return resultados
+
+
+
