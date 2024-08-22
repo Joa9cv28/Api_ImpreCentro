@@ -6,4 +6,4 @@
 
 2. copy paste .env
 
-3. uvicorn main:app --reload
+3. uvicorn app:app --reload
