@@ -5,6 +5,7 @@ import os
 import conexion
 import clases
 from datetime import datetime
+from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()
 # Crear un router
@@ -12,6 +13,19 @@ api_router = APIRouter(prefix="/api")
 
 # Carpeta donde se guardarán los archivos
 UPLOAD_DIRECTORY = "documentos"
+
+origins = [
+    "http://localhost",
+    "http://localhost:8080",
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins='*', ##IMPORTANTE
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Asegúrate de que la carpeta exista
 os.makedirs(UPLOAD_DIRECTORY, exist_ok=True)
