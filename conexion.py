@@ -1,3 +1,5 @@
+import base64
+import hashlib
 import mysql.connector
 from dotenv import load_dotenv
 import os
@@ -319,6 +321,10 @@ def actualizarUsuario(usuario:clases.Usuario):
     
     return resultados
 
+# Función para verificar la contraseña ingresada
+def verificar_contrasena(contrasena, hash_almacenado):
+    return contrasena == hash_almacenado
+
 def loginUsuario(usuario:clases.Login):
     conexion = mysql.connector.connect(
         host=os.environ['host'],
@@ -330,25 +336,34 @@ def loginUsuario(usuario:clases.Login):
     
     # Crear un objeto cursor para ejecutar consultas SQL
     cursor = conexion.cursor()
-
-    # Ejecutar una consulta SQL para seleccionar datos
     
-    consulta = f"SELECT * FROM usuarios WHERE (usu_correo LIKE '{usuario.correo}');"
-    print(consulta)
+    # Ejecutar una consulta SQL para seleccionar datos del usuario por correo
+    consulta = f"SELECT usu_password FROM usuarios WHERE usu_correo = '{usuario.correo}' LIMIT 1;"
+    #print(f"Consulta SQL: {consulta}")
     cursor.execute(consulta)
 
-    # Obtener todos los resultados de la consulta
-    resultados = cursor.fetchall()
-    #print(consulta)
-    # Mostrar los resultados
-    # for resultado in resultados:
-    #     print(resultado)
-        
+    # Obtener el resultado de la consulta
+    resultado = cursor.fetchone()  # Se espera solo un resultado
+    if not resultado:
+        # Si el usuario no existe
+        cursor.close()
+        conexion.close()
+        return {"success": False, "message": "Usuario no encontrado."}
+
+    stored_password_base64 = resultado[0]  
+    validacion = verificar_contrasena(usuario.password, stored_password_base64)
+    
+    if validacion == True:
+        # Contraseña válida
+        response = {"success": True, "message": "Inicio de sesión exitoso."}
+    else:
+        # Contraseña inválida
+        response = {"success": False, "message": "Contraseña incorrecta."}
+
     # Cerrar el cursor y la conexión
     cursor.close()
     conexion.close()
     
-    return resultados
-
+    return response
 
 

@@ -96,16 +96,14 @@ async def get_file(id: int):
 def loginUsuario(usuario:clases.Login):
     resultado = conexion.loginUsuario(usuario)
     print(resultado)
-    print(usuario)
-    if (len(resultado) == 1):
-        if (resultado[0][2] == usuario.password and resultado[0][1] == usuario.correo):
-            return clases.Respuesta(success=True, message='All ok', data=None)
-        else:
+    print()
+    if (resultado['success'] == True):
+        return clases.Respuesta(success=True, message='All ok', data=None)
+    elif (resultado['success'] == False):
+        if (resultado['message'] == 'Usuario no encontrado.' or resultado['message'] == 'Contraseña incorrecta.'):
             return clases.Respuesta(success=False, message='Invalid password or email', data=None)
-    elif (len(resultado) > 1):
-        return clases.Respuesta(success=False, message='Please contact an administrator', data=None)
-    elif (len(resultado) < 1):
-        return clases.Respuesta(success=False, message='Invalid password or email', data=None)
+        else:
+            return clases.Respuesta(success=False, message='Please contact an administrator', data=None)
     return clases.Respuesta(success=False, message='Intern problems, please contact an administrator', data=None)
 
 @api_router.delete('/usuario')
