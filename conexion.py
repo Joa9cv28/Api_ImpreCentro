@@ -4,6 +4,8 @@ import mysql.connector
 from dotenv import load_dotenv
 import os
 import clases
+from fastapi import File, UploadFile, HTTPException 
+from pathlib import Path
 
 # Cargar las variables de entorno desde el archivo .env
 load_dotenv()
@@ -154,7 +156,7 @@ def registrarArchivo(archivo:clases.Archivo):
     # Mostrar los resultados
     # for resultado in resultados:
     #     print(resultado)
-    
+
     #Se envia la información verificando la insersión de datos
     conexion.commit() 
     # Cerrar el cursor y la conexión

@@ -6,6 +6,8 @@ import conexion
 import clases
 from datetime import datetime
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi import File, UploadFile, HTTPException 
+from pathlib import Path
 
 app = FastAPI()
 # Crear un router
@@ -13,6 +15,9 @@ api_router = APIRouter(prefix="/api")
 
 # Carpeta donde se guardarán los archivos
 UPLOAD_DIRECTORY = "documentos"
+
+UPLOAD_FOLDER = Path("test")
+UPLOAD_FOLDER.mkdir(exist_ok=True)  # Crea la carpeta si no existe
 
 origins = [
     "http://localhost",
@@ -69,19 +74,61 @@ def registrarArchivo(archivo:clases.Archivo):
     resultado = conexion.registrarArchivo(archivo)
     return clases.Respuesta(success=True, message='All ok', data=resultado)
 
+    
+    
 @api_router.post("/subirArchivo")
 async def subirArchivo(file: UploadFile):
-    filename = file.filename
-    file_extension = os.path.splitext(filename)[1]
-    now = datetime.now()
-    filename = now.strftime("%Y%m%d%H%M%S")+str(now.microsecond)+file_extension
-    file_location = os.path.join(UPLOAD_DIRECTORY, filename)
-    with open(file_location, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
-    print(datetime.now())
-    return clases.Respuesta(success=True, message='All ok', data={"location": file_location})
+    """
+    Endpoint para subir un archivo de tipo .jpg y almacenarlo en la carpeta 'test'.
+    """
+    # Verifica que el archivo tenga extensión .jpg
+    if not file.filename.lower().endswith(".jpg"):
+        raise HTTPException(status_code=400, detail="Solo se permiten archivos .jpg")
+
+    # Limpia el nombre del archivo para evitar problemas de seguridad
+    safe_filename = file.filename.replace("/", "").replace("\\", "")
+
+    # Crea una ruta absoluta para garantizar que la carpeta esté bien definida
+    file_path = UPLOAD_FOLDER / safe_filename
+
+    # Asegúrate de que la carpeta de destino exista
+    try:
+        UPLOAD_FOLDER.mkdir(parents=True, exist_ok=True)
+    except Exception as e:
+        print(f"Error al crear la carpeta: {e}")
+        raise HTTPException(status_code=500, detail="No se pudo crear la carpeta de destino")
+
+    try:
+        # Guarda el archivo en la carpeta de destino
+        with file_path.open("wb") as f:
+            content = await file.read()
+            if not content:
+                raise HTTPException(status_code=400, detail="El archivo está vacío")
+            f.write(content)
+
+        print(f"Archivo guardado en: {file_path}")
+        return {
+            "success": True,
+            "message": f"Archivo '{safe_filename}' subido correctamente",
+            "data": {"filename": safe_filename, "path": str(file_path)}
+        }
+    except Exception as e:
+        print(f"Error al guardar el archivo: {e}")
+        raise HTTPException(status_code=500, detail="No se pudo guardar el archivo")
+
+    # filename = file.filename
+    # file_extension = os.path.splitext(filename)[1]
+    # now = datetime.now()
+    # filename = now.strftime("%Y%m%d%H%M%S")+str(now.microsecond)+file_extension
+    # file_location = os.path.join(UPLOAD_DIRECTORY, filename)
+    # with open(file_location, "wb") as buffer:
+    #     shutil.copyfileobj(file.file, buffer)
+    # print(datetime.now())
+    # return clases.Respuesta(success=True, message='All ok', data={"location": file_location})
     #return {"file_extension": file_extension,"filename": file.filename, "location": file_location}
 
+    # @app.post("/upload")
+    # async def upload_file(file: UploadFile = File(...)):
 
 @api_router.get("/descargarArchivo/{id}")
 async def get_file(id: int):
