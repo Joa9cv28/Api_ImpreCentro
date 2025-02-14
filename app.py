@@ -192,7 +192,7 @@ def register_user(user: RegisterUser = Depends(), file: UploadFile = File(...)):
     except Exception as e:
         raise HTTPException(status_code=500, detail="Error al verificar el correo en Cognito")
 
-    # Registrar usuario en Cognito
+    # ----------------- Registro de usuario en Cognito y Base de Datos -----------------
     try:
         response = cognito_client.sign_up(
             ClientId=CLIENT_ID,
@@ -203,6 +203,15 @@ def register_user(user: RegisterUser = Depends(), file: UploadFile = File(...)):
                 {'Name': 'name', 'Value': user.full_name}
             ]
         )
+
+        nuevo_usuario = clases.Usuario(
+            usu_correo=user.email,
+            usu_password=user.password,
+            usu_nombre=user.full_name,
+            usu_codigo=user.student_code
+        )
+        conexion.registrarUsuario(nuevo_usuario)
+
         return {"message": "Usuario registrado correctamente. Verifica tu correo.", "user_sub": response["UserSub"]}
     except cognito_client.exceptions.UsernameExistsException:
         raise HTTPException(status_code=400, detail="El usuario ya existe")
@@ -274,6 +283,41 @@ def verify_token(request: Request):
         return decoded_token
     except Exception as e:
         raise HTTPException(status_code=401, detail="Token inválido o expirado")
+
+class DeleteUser:
+    def __init__(self, student_code: str = Form(...)):
+        self.student_code = student_code
+
+# ----------------- Eliminación de usuario en Cognito y Base de Datos -----------------
+
+class DeleteUser:
+    def __init__(self, student_code: str = Form(...)):
+        self.student_code = student_code
+
+@api_router.delete("/delete_user/")
+def delete_user(user: DeleteUser = Depends()):
+    try:
+        # Buscar usuario en la base de datos
+        usuario_db = conexion.buscarUsuarioPorCodigo(user.student_code)
+        if not usuario_db:
+            raise HTTPException(status_code=404, detail="Usuario no encontrado en la base de datos")
+
+        # Eliminar usuario en Cognito
+        cognito_client.admin_delete_user(
+            UserPoolId=USER_POOL_ID,
+            Username=user.student_code
+        )
+
+        # Eliminar usuario en la base de datos
+        conexion.borrarUsuarioPorCodigo(user.student_code)
+
+        return {"message": "Usuario eliminado en Cognito y base de datos"}
+
+    except cognito_client.exceptions.UserNotFoundException:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado en Cognito")
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error eliminando usuario: {str(e)}")
 
 # Incluir router en la aplicación principal
 app.include_router(api_router)

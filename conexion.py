@@ -101,7 +101,7 @@ def devolverArchivos():
 
 
 #-----------------------------------------------INSERTAR
-def registrarUsuario(usuario:clases.Usuario):
+def registrarUsuario(usuario: clases.Usuario):
     conexion = mysql.connector.connect(
         host=os.environ['host'],
         user=os.environ['user'],
@@ -110,28 +110,44 @@ def registrarUsuario(usuario:clases.Usuario):
         port=os.environ['port']
     )
     
-    # Crear un objeto cursor para ejecutar consultas SQL
     cursor = conexion.cursor()
     
-    # Ejecutar una consulta SQL para seleccionar datos
-    consulta = f"INSERT INTO usuarios(usu_correo, usu_password, usu_nombre, usu_codigo) VALUES ('{usuario.usu_correo}', '{usuario.usu_password}', '{usuario.usu_nombre}', '{usuario.usu_codigo}');"
-    cursor.execute(consulta)
-    #print(consulta)
+    consulta = """
+        INSERT INTO usuarios (usu_correo, usu_password, usu_nombre, usu_codigo) 
+        VALUES (%s, %s, %s, %s)
+    """
+    valores = (usuario.usu_correo, usuario.usu_password, usuario.usu_nombre, usuario.usu_codigo)
 
-    # Obtener todos los resultados de la consulta
-    resultados = cursor.fetchall()
-
-    # Mostrar los resultados
-    # for resultado in resultados:
-    #     print(resultado)
+    cursor.execute(consulta, valores)
     
-    #Se envia la información verificando la insersión de datos
-    conexion.commit() 
-    # Cerrar el cursor y la conexión
+    conexion.commit()
+    cursor.close()
+    conexion.close()
+
+    return {"message": "Usuario registrado en la base de datos"}
+
+# ----------------- Buscar usuario por Código de Estudiante -----------------
+def buscarUsuarioPorCodigo(codigo: str):
+    conexion = mysql.connector.connect(
+        host=os.environ['host'],
+        user=os.environ['user'],
+        password=os.environ['password'],
+        database=os.environ['database'],
+        port=os.environ['port']
+    )
+    
+    cursor = conexion.cursor()
+    
+    consulta = "SELECT * FROM usuarios WHERE usu_codigo = %s"
+    cursor.execute(consulta, (codigo,))
+    
+    resultado = cursor.fetchall()
+    
     cursor.close()
     conexion.close()
     
-    return resultados
+    return resultado
+
     
 def registrarArchivo(archivo:clases.Archivo):
     conexion = mysql.connector.connect(
@@ -165,8 +181,8 @@ def registrarArchivo(archivo:clases.Archivo):
     
     return resultados
 
-#-----------------------------------------------ELIMINAR
-def borrarUsuario(usuario:clases.Usuario):
+# ----------------- Eliminar usuario por Código de Estudiante -----------------
+def borrarUsuarioPorCodigo(codigo: str):
     conexion = mysql.connector.connect(
         host=os.environ['host'],
         user=os.environ['user'],
@@ -175,28 +191,17 @@ def borrarUsuario(usuario:clases.Usuario):
         port=os.environ['port']
     )
     
-    # Crear un objeto cursor para ejecutar consultas SQL
     cursor = conexion.cursor()
     
-    # Ejecutar una consulta SQL para seleccionar datos
-    consulta = f"DELETE FROM usuarios WHERE usu_id = {usuario.usu_id};"
-    cursor.execute(consulta)
-    #print(consulta)
-
-    # Obtener todos los resultados de la consulta
-    resultados = cursor.fetchall()
-
-    # Mostrar los resultados
-    # for resultado in resultados:
-    #     print(resultado)
+    consulta = "DELETE FROM usuarios WHERE usu_codigo = %s"
+    cursor.execute(consulta, (codigo,))
     
-    #Se envia la información verificando la eliminación de datos
-    conexion.commit() 
-    # Cerrar el cursor y la conexión
+    conexion.commit()
+    
     cursor.close()
     conexion.close()
-    
-    return resultados
+
+    return {"message": "Usuario eliminado de la base de datos"}
     
 def borrarArchivo(archivo:clases.Archivo):
     conexion = mysql.connector.connect(
