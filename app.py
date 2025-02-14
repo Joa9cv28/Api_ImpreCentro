@@ -1,5 +1,5 @@
 from datetime import datetime
-from fastapi import APIRouter, FastAPI, File, HTTPException, UploadFile
+from fastapi import APIRouter, FastAPI, File, HTTPException, UploadFile, Form, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pathlib import Path
@@ -9,14 +9,26 @@ from botocore.exceptions import BotoCoreError, ClientError
 import clases
 import conexion
 import os
-import shutil
+import re
+import jwt
+import requests
+from dotenv import load_dotenv
 
-# Configuración de AWS S3
-BUCKET_NAME = "mi-app-web-bucket"
 
-# Cliente de S3
+# Cargar las variables de entorno desde el archivo .env
+load_dotenv()
+
+# Configuración de AWS
+BUCKET_NAME = os.getenv("BUCKET_NAME")
+AWS_REGION = os.getenv("AWS_REGION", "us-east-1")
+USER_POOL_ID = os.getenv("COGNITO_USER_POOL_ID")
+CLIENT_ID = os.getenv("COGNITO_CLIENT_ID")
+
+# Cliente de AWS
 session = boto3.Session(profile_name="default")
-s3_client = boto3.client("s3", region_name="us-east-1")
+s3_client = boto3.client("s3", region_name=AWS_REGION)
+cognito_client = boto3.client("cognito-idp", region_name=AWS_REGION)
+rekognition_client = boto3.client("rekognition", region_name=AWS_REGION)
 
 # Inicializar FastAPI
 app = FastAPI()
@@ -120,6 +132,148 @@ async def rename_file(request: BaseModel):
         return {"message": f"Archivo {old_name} renombrado a {new_name}"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al renombrar el archivo: {str(e)}")
+
+# ----------------- Autenticación con Cognito y Rekognition -----------------
+
+class RegisterUser:
+    def __init__(
+        self,
+        email: str = Form(...),
+        full_name: str = Form(...),
+        student_code: str = Form(...),
+        password: str = Form(...),
+        confirm_password: str = Form(...)
+    ):
+        self.email = email
+        self.full_name = full_name
+        self.student_code = student_code
+        self.password = password
+        self.confirm_password = confirm_password
+
+@api_router.post("/register/")
+def register_user(user: RegisterUser = Depends(), file: UploadFile = File(...)):
+    if user.password != user.confirm_password:
+        raise HTTPException(status_code=400, detail="Las contraseñas no coinciden")
+
+    # Leer imagen y enviarla a Rekognition
+    image_bytes = file.file.read()
+    response = rekognition_client.detect_text(Image={'Bytes': image_bytes})
+    detected_text = [item['DetectedText'].lower() for item in response['TextDetections']]
+
+    # Extraer código de estudiante
+    extracted_code = None
+    detected_text_joined = " ".join(detected_text)
+    match = re.findall(r"c[oó]digo[:\s]+(\d+)", detected_text_joined)
+    if match:
+        extracted_code = match[0]
+
+    if extracted_code is None:
+        for i, word in enumerate(detected_text):
+            if "código" in word or "codigo" in word:
+                if i + 1 < len(detected_text) and detected_text[i + 1].isdigit():
+                    extracted_code = detected_text[i + 1]
+                    break
+
+    if extracted_code != user.student_code:
+        raise HTTPException(status_code=400, detail="El código de estudiante no coincide con la credencial")
+
+    # Verificar que pertenece a CUCEI
+    if not any("cucei" in text for text in detected_text):
+        raise HTTPException(status_code=400, detail="La credencial no pertenece a CUCEI")
+
+    # Validar si el correo ya está registrado en Cognito
+    try:
+        existing_users = cognito_client.list_users(
+            UserPoolId=USER_POOL_ID,
+            Filter=f'email="{user.email}"'
+        )
+        if existing_users["Users"]:
+            raise HTTPException(status_code=400, detail="El correo ya está registrado")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail="Error al verificar el correo en Cognito")
+
+    # Registrar usuario en Cognito
+    try:
+        response = cognito_client.sign_up(
+            ClientId=CLIENT_ID,
+            Username=user.student_code,
+            Password=user.password,
+            UserAttributes=[
+                {'Name': 'email', 'Value': user.email},
+                {'Name': 'name', 'Value': user.full_name}
+            ]
+        )
+        return {"message": "Usuario registrado correctamente. Verifica tu correo.", "user_sub": response["UserSub"]}
+    except cognito_client.exceptions.UsernameExistsException:
+        raise HTTPException(status_code=400, detail="El usuario ya existe")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error en Cognito: {str(e)}")
+
+class LoginUser:
+    def __init__(self, student_code: str = Form(...), password: str = Form(...)):
+        self.student_code = student_code
+        self.password = password
+
+@api_router.post("/login/")
+def login_user(user: LoginUser = Depends()):
+    try:
+        response = cognito_client.initiate_auth(
+            ClientId=CLIENT_ID,
+            AuthFlow="USER_PASSWORD_AUTH",
+            AuthParameters={
+                "USERNAME": user.student_code,
+                "PASSWORD": user.password
+            }
+        )
+        return {"access_token": response["AuthenticationResult"]["AccessToken"]}
+    except cognito_client.exceptions.NotAuthorizedException:
+        raise HTTPException(status_code=401, detail="Credenciales incorrectas")
+    except cognito_client.exceptions.UserNotFoundException:
+        raise HTTPException(status_code=400, detail="Usuario no encontrado")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error en Cognito: {str(e)}")
+
+class VerifyUser:
+    def __init__(self, student_code: str = Form(...), code: str = Form(...)):
+        self.student_code = student_code
+        self.code = code
+
+@api_router.post("/verify/")
+def verify_user(user: VerifyUser = Depends()):
+    try:
+        cognito_client.confirm_sign_up(
+            ClientId=CLIENT_ID,
+            Username=user.student_code,
+            ConfirmationCode=user.code
+        )
+        return {"message": "Cuenta verificada exitosamente. Ya puedes iniciar sesión."}
+    except cognito_client.exceptions.UserNotFoundException:
+        raise HTTPException(status_code=400, detail="Usuario no encontrado")
+    except cognito_client.exceptions.CodeMismatchException:
+        raise HTTPException(status_code=400, detail="Código incorrecto")
+    except cognito_client.exceptions.ExpiredCodeException:
+        raise HTTPException(status_code=400, detail="El código ha expirado")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error en Cognito: {str(e)}")
+
+def verify_token(request: Request):
+    """Función para validar el token de acceso de Cognito"""
+    auth_header = request.headers.get("Authorization")
+    if not auth_header:
+        raise HTTPException(status_code=401, detail="Token requerido")
+
+    token = auth_header.split("Bearer ")[-1]
+    try:
+        keys_url = f"https://cognito-idp.{AWS_REGION}.amazonaws.com/{USER_POOL_ID}/.well-known/jwks.json"
+        keys = requests.get(keys_url).json()["keys"]
+        decoded_token = jwt.decode(token, options={"verify_signature": False})
+
+        if decoded_token["iss"] != f"https://cognito-idp.{AWS_REGION}.amazonaws.com/{USER_POOL_ID}":
+            raise HTTPException(status_code=401, detail="Token inválido")
+        
+        return decoded_token
+    except Exception as e:
+        raise HTTPException(status_code=401, detail="Token inválido o expirado")
 
 # Incluir router en la aplicación principal
 app.include_router(api_router)
