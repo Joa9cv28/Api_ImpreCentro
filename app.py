@@ -92,7 +92,7 @@ async def upload_file(file: UploadFile = File(...)):
 async def download_all_files():
     """Descarga todos los archivos del bucket S3 a una carpeta local."""
     folder_path = Path("C:/laragon/www/servicioImpreCentro/documents")
-    folder_path.mkdir(exist_ok=True)
+    folder_path.mkdir(parents=True, exist_ok=True)  # Asegura que toda la ruta se crea
 
     try:
         response = s3_client.list_objects_v2(Bucket=BUCKET_NAME)
@@ -133,8 +133,9 @@ async def rename_file(request: BaseModel):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al renombrar el archivo: {str(e)}")
 
+#############################################################################
 # ----------------- Autenticación con Cognito y Rekognition -----------------
-
+#############################################################################
 class RegisterUser:
     def __init__(
         self,
@@ -191,8 +192,20 @@ def register_user(user: RegisterUser = Depends(), file: UploadFile = File(...)):
             raise HTTPException(status_code=400, detail="El correo ya está registrado")
     except Exception as e:
         raise HTTPException(status_code=500, detail="Error al verificar el correo en Cognito")
+    print(f"USER_POOL_ID: {USER_POOL_ID}, CLIENT_ID: {CLIENT_ID}") ############################################################# Debug de variables de entorno
 
+    ########################################################################################################################################################## 
+    ################################################################ Debug de objetos ########################################################################
+    ##########################################################################################################################################################
+    print(f"user.student_code: {user.student_code}, user.password: {user.password}, user.email: {user.email}, user.full_name: {user.full_name}")
+    print(f"response: {response}")
+    print(f"detected_text: {detected_text}")
+    print(f"extracted_code: {extracted_code}")
+    print(f"existing_users: {existing_users}")
+
+    ####################################################################################
     # ----------------- Registro de usuario en Cognito y Base de Datos -----------------
+    ####################################################################################
     try:
         response = cognito_client.sign_up(
             ClientId=CLIENT_ID,
@@ -288,8 +301,9 @@ class DeleteUser:
     def __init__(self, student_code: str = Form(...)):
         self.student_code = student_code
 
+#######################################################################################
 # ----------------- Eliminación de usuario en Cognito y Base de Datos -----------------
-
+#######################################################################################
 class DeleteUser:
     def __init__(self, student_code: str = Form(...)):
         self.student_code = student_code
