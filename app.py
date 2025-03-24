@@ -72,8 +72,8 @@ def read_usuarios():
 @api_router.post("/upload")
 async def upload_file(file: UploadFile = File(...)):
     """Sube un archivo al bucket S3."""
-    if not file.content_type.startswith("image/"):
-        raise HTTPException(status_code=400, detail="Solo se permiten archivos de imagen")
+    if not file.filename.lower().endswith(".gcode"):
+        raise HTTPException(status_code=400, detail="Solo se permiten archivos .gcode")
 
     try:
         s3_client.upload_fileobj(
