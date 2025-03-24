@@ -36,8 +36,7 @@ api_router = APIRouter(prefix="/api")
 
 # Carpeta local
 UPLOAD_DIRECTORY = "documentos"
-UPLOAD_FOLDER = Path("test")
-UPLOAD_FOLDER.mkdir(exist_ok=True)
+UPLOAD_FOLDER = os.getenv("UPLOAD_FOLDER")
 
 # CORS
 app.add_middleware(
@@ -91,7 +90,7 @@ async def upload_file(file: UploadFile = File(...)):
 @api_router.get("/download-all")
 async def download_all_files():
     """Descarga todos los archivos del bucket S3 a una carpeta local."""
-    folder_path = Path("C:/laragon/www/servicioImpreCentro/documents")
+    folder_path = Path(UPLOAD_FOLDER)
     folder_path.mkdir(parents=True, exist_ok=True)  # Asegura que toda la ruta se crea
 
     try:
@@ -110,7 +109,7 @@ async def download_all_files():
 @api_router.get("/static-files/{file_name}")
 async def get_static_file(file_name: str):
     """Sirve un archivo descargado del bucket S3."""
-    file_path = Path("C:/laragon/www/servicioImpreCentro/documents") / file_name  # Asegurar consistencia en la ruta
+    file_path = Path(UPLOAD_FOLDER) / file_name  # Asegurar consistencia en la ruta
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="Archivo no encontrado")
     return FileResponse(file_path)
