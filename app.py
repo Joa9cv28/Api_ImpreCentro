@@ -254,6 +254,30 @@ def login_user(user: LoginUser = Depends()):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error en Cognito: {str(e)}")
 
+@api_router.post("/validate-token")
+def validate_token(request: Request):
+
+    auth_header = request.headers.get("Authorization")
+    if not auth_header or not auth_header.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Token requerido o mal formado")
+
+    token = auth_header.replace("Bearer ", "")
+
+    try:
+        # Cognito validará el token automáticamente internamente
+        user_info = cognito_client.get_user(
+            AccessToken=token
+        )
+
+        return {"valid": True, "user": user_info}
+
+    except cognito_client.exceptions.NotAuthorizedException:
+        raise HTTPException(status_code=401, detail="Token inválido o expirado")
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail="Error al validar el token")
+
+
 class VerifyUser:
     def __init__(self, student_code: str = Form(...), code: str = Form(...)):
         self.student_code = student_code
