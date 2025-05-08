@@ -69,42 +69,44 @@ def read_usuarios():
     ) for registro in registros]
     return clases.Respuesta(success=True, message="All ok", data=usuarios)
 
-@api_router.post("/upload")
-async def upload_file(file: UploadFile = File(...)):
-    """Sube un archivo al bucket S3."""
+@api_router.post("/upload/{student_code}")
+async def upload_file(student_code: str, file: UploadFile = File(...)):
     if not file.filename.lower().endswith(".gcode"):
         raise HTTPException(status_code=400, detail="Solo se permiten archivos .gcode")
-
     try:
+        object_key = f"{student_code}/{file.filename}"  # Ruta dentro de la carpeta del usuario
         s3_client.upload_fileobj(
             file.file,
             BUCKET_NAME,
-            file.filename,
+            object_key,
             ExtraArgs={"ContentType": file.content_type},
         )
-        return {"message": f"Archivo {file.filename} subido correctamente a S3"}
+        return {"message": f"Archivo {file.filename} subido correctamente a la carpeta de {student_code}"}
     except (BotoCoreError, ClientError) as e:
-        print(f"Error subiendo archivo: {str(e)}")
         raise HTTPException(status_code=500, detail="Error al subir el archivo")
 
-@api_router.get("/download-all")
-async def download_all_files():
-    """Descarga todos los archivos del bucket S3 a una carpeta local."""
-    folder_path = Path(UPLOAD_FOLDER)
-    folder_path.mkdir(parents=True, exist_ok=True)  # Asegura que toda la ruta se crea
+
+@api_router.get("/download-all/{student_code}")
+async def download_all_files(student_code: str):
+    folder_path = Path(UPLOAD_FOLDER) / student_code
+    folder_path.mkdir(parents=True, exist_ok=True)
 
     try:
-        response = s3_client.list_objects_v2(Bucket=BUCKET_NAME)
+        response = s3_client.list_objects_v2(Bucket=BUCKET_NAME, Prefix=f"{student_code}/")
         objects = response.get("Contents", [])
         for obj in objects:
             key = obj["Key"]
-            local_file_path = folder_path / key
+            if key.endswith("/"):
+                continue  # Omitir entradas que representan solo la carpeta
+            filename = key.split("/")[-1]
+            local_file_path = folder_path / filename
             s3_client.download_file(BUCKET_NAME, key, str(local_file_path))
+
 
         return {"message": "Archivos descargados correctamente", "files": [obj["Key"] for obj in objects]}
     except Exception as e:
-        print("Error:", str(e))
         raise HTTPException(status_code=500, detail="Error al descargar archivos")
+
 
 @api_router.get("/static-files/{file_name}")
 async def get_static_file(file_name: str):
@@ -224,6 +226,9 @@ def register_user(user: RegisterUser = Depends(), file: UploadFile = File(...)):
         )
         conexion.registrarUsuario(nuevo_usuario)
 
+        # Crear carpeta en S3
+        s3_client.put_object(Bucket=BUCKET_NAME, Key=f"{user.student_code}/")
+        
         return {"message": "Usuario registrado correctamente. Verifica tu correo.", "user_sub": response["UserSub"]}
     except cognito_client.exceptions.UsernameExistsException:
         raise HTTPException(status_code=400, detail="El usuario ya existe")
@@ -348,7 +353,13 @@ def delete_user(user: DeleteUser = Depends()):
         # Eliminar usuario en la base de datos
         conexion.borrarUsuarioPorCodigo(user.student_code)
 
-        return {"message": "Usuario eliminado en Cognito y base de datos"}
+        # Eliminar todos los archivos del usuario del bucket
+        response = s3_client.list_objects_v2(Bucket=BUCKET_NAME, Prefix=f"{user.student_code}/")
+        objects = response.get("Contents", [])
+        for obj in objects:
+            s3_client.delete_object(Bucket=BUCKET_NAME, Key=obj["Key"])
+
+        return {"message": "Usuario eliminado en Cognito, base de datos y S3"}
 
     except cognito_client.exceptions.UserNotFoundException:
         raise HTTPException(status_code=404, detail="Usuario no encontrado en Cognito")
