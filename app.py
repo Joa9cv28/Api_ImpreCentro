@@ -36,8 +36,7 @@ api_router = APIRouter(prefix="/api")
 
 # Carpeta local
 UPLOAD_DIRECTORY = "documentos"
-UPLOAD_FOLDER = Path("test")
-UPLOAD_FOLDER.mkdir(exist_ok=True)
+UPLOAD_FOLDER = os.getenv("UPLOAD_FOLDER")
 
 # CORS
 app.add_middleware(
@@ -73,8 +72,8 @@ def read_usuarios():
 @api_router.post("/upload")
 async def upload_file(file: UploadFile = File(...)):
     """Sube un archivo al bucket S3."""
-    if not file.content_type.startswith("image/"):
-        raise HTTPException(status_code=400, detail="Solo se permiten archivos de imagen")
+    if not file.filename.lower().endswith(".gcode"):
+        raise HTTPException(status_code=400, detail="Solo se permiten archivos .gcode")
 
     try:
         s3_client.upload_fileobj(
@@ -91,8 +90,8 @@ async def upload_file(file: UploadFile = File(...)):
 @api_router.get("/download-all")
 async def download_all_files():
     """Descarga todos los archivos del bucket S3 a una carpeta local."""
-    folder_path = Path("C:/laragon/www/servicioImpreCentro/documents")
-    folder_path.mkdir(exist_ok=True)
+    folder_path = Path(UPLOAD_FOLDER)
+    folder_path.mkdir(parents=True, exist_ok=True)  # Asegura que toda la ruta se crea
 
     try:
         response = s3_client.list_objects_v2(Bucket=BUCKET_NAME)
@@ -110,7 +109,7 @@ async def download_all_files():
 @api_router.get("/static-files/{file_name}")
 async def get_static_file(file_name: str):
     """Sirve un archivo descargado del bucket S3."""
-    file_path = Path("C:/laragon/www/servicioImpreCentro/documents") / file_name  # Asegurar consistencia en la ruta
+    file_path = Path(UPLOAD_FOLDER) / file_name  # Asegurar consistencia en la ruta
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="Archivo no encontrado")
     return FileResponse(file_path)
@@ -133,8 +132,9 @@ async def rename_file(request: BaseModel):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al renombrar el archivo: {str(e)}")
 
+#############################################################################
 # ----------------- Autenticación con Cognito y Rekognition -----------------
-
+#############################################################################
 class RegisterUser:
     def __init__(
         self,
@@ -191,8 +191,20 @@ def register_user(user: RegisterUser = Depends(), file: UploadFile = File(...)):
             raise HTTPException(status_code=400, detail="El correo ya está registrado")
     except Exception as e:
         raise HTTPException(status_code=500, detail="Error al verificar el correo en Cognito")
+    print(f"USER_POOL_ID: {USER_POOL_ID}, CLIENT_ID: {CLIENT_ID}") ############################################################# Debug de variables de entorno
 
+    ########################################################################################################################################################## 
+    ################################################################ Debug de objetos ########################################################################
+    ##########################################################################################################################################################
+    print(f"user.student_code: {user.student_code}, user.password: {user.password}, user.email: {user.email}, user.full_name: {user.full_name}")
+    print(f"response: {response}")
+    print(f"detected_text: {detected_text}")
+    print(f"extracted_code: {extracted_code}")
+    print(f"existing_users: {existing_users}")
+
+    ####################################################################################
     # ----------------- Registro de usuario en Cognito y Base de Datos -----------------
+    ####################################################################################
     try:
         response = cognito_client.sign_up(
             ClientId=CLIENT_ID,
@@ -242,6 +254,30 @@ def login_user(user: LoginUser = Depends()):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error en Cognito: {str(e)}")
 
+@api_router.post("/validate-token")
+def validate_token(request: Request):
+
+    auth_header = request.headers.get("Authorization")
+    if not auth_header or not auth_header.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Token requerido o mal formado")
+
+    token = auth_header.replace("Bearer ", "")
+
+    try:
+        # Cognito validará el token automáticamente internamente
+        user_info = cognito_client.get_user(
+            AccessToken=token
+        )
+
+        return {"valid": True, "user": user_info}
+
+    except cognito_client.exceptions.NotAuthorizedException:
+        raise HTTPException(status_code=401, detail="Token inválido o expirado")
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail="Error al validar el token")
+
+
 class VerifyUser:
     def __init__(self, student_code: str = Form(...), code: str = Form(...)):
         self.student_code = student_code
@@ -288,8 +324,9 @@ class DeleteUser:
     def __init__(self, student_code: str = Form(...)):
         self.student_code = student_code
 
+#######################################################################################
 # ----------------- Eliminación de usuario en Cognito y Base de Datos -----------------
-
+#######################################################################################
 class DeleteUser:
     def __init__(self, student_code: str = Form(...)):
         self.student_code = student_code
